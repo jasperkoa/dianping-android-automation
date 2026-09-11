@@ -59,7 +59,7 @@ Windows / Python
 ### 1. 克隆仓库
 
 ```powershell
-git clone https://github.com/YOUR_NAME/dianping-android-automation.git
+git clone https://github.com/jasperkoa/dianping-android-automation.git
 cd dianping-android-automation
 ```
 
@@ -110,12 +110,12 @@ set "ANDROID_BACK_MODE=adb"
 
 如果 ROM 拒绝 `adb shell input keyevent 4`，使用 UHID 返回：
 
-| 手机导航方式 | 建议配置 |
-| --- | --- |
-| 全面屏手势，左边缘返回 | `gesture-left` |
+| 手机导航方式      | 建议配置            |
+| ----------- | --------------- |
+| 全面屏手势，左边缘返回 | `gesture-left`  |
 | 全面屏手势，右边缘返回 | `gesture-right` |
-| 三键导航，返回键在左侧 | `nav-left` |
-| 三键导航，返回键在右侧 | `nav-right` |
+| 三键导航，返回键在左侧 | `nav-left`      |
+| 三键导航，返回键在右侧 | `nav-right`     |
 
 例如：
 
@@ -161,19 +161,19 @@ set "ANDROID_BACK_MODE=nav-right"
 
 常用参数：
 
-| 参数 | 默认值 | 说明 |
-| --- | ---: | --- |
-| `--serial` | 自动 | 目标 ADB 设备；连接多台设备时必须指定 |
-| `--adb` | 自动 | `adb` 可执行文件路径 |
-| `--package` | `com.dianping.v1` | 目标 Android 包名 |
-| `--input` | `uhid` | 输入通道：`uhid` / `adb` |
-| `--limit` | `10` | 单次成功操作上限 |
-| `--max-scrolls` | `30` | 最大向下滚动次数 |
-| `--delay` | `2.5` | 每次 UI 操作后的等待时间（秒） |
-| `--inspect` | false | 只读取，不点击 |
-| `--back-mode` | `adb` | 返回方式 |
-| `--scrcpy-server` | 自动 | scrcpy-server 文件路径 |
-| `--scrcpy-version` | 自动 | scrcpy server 版本 |
+| 参数                 | 默认值               | 说明                    |
+| ------------------ | -----------------:| --------------------- |
+| `--serial`         | 自动                | 目标 ADB 设备；连接多台设备时必须指定 |
+| `--adb`            | 自动                | `adb` 可执行文件路径         |
+| `--package`        | `com.dianping.v1` | 目标 Android 包名         |
+| `--input`          | `uhid`            | 输入通道：`uhid` / `adb`   |
+| `--limit`          | `10`              | 单次成功操作上限              |
+| `--max-scrolls`    | `30`              | 最大向下滚动次数              |
+| `--delay`          | `2.5`             | 每次 UI 操作后的等待时间（秒）     |
+| `--inspect`        | false             | 只读取，不点击               |
+| `--back-mode`      | `adb`             | 返回方式                  |
+| `--scrcpy-server`  | 自动                | scrcpy-server 文件路径    |
+| `--scrcpy-version` | 自动                | scrcpy server 版本      |
 
 停止运行：在终端中按 `Ctrl+C`。
 
