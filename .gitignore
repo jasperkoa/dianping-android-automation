@@ -1,0 +1,31 @@
+# Local configuration / device identifiers
+config.local.cmd
+.env
+
+# Runtime output
+logs/
+*.log
+*.xml
+current.png
+list-current.png
+screenshots/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build outputs (source and one checked-in prebuilt helper are retained)
+android/build/
+*.class
