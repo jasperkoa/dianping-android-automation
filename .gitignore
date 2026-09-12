@@ -1,31 +1,50 @@
-# Local configuration / device identifiers
-config.local.cmd
-.env
-
-# Runtime output
-logs/
-*.log
-*.xml
-current.png
-list-current.png
-screenshots/
-
-# Python
+# Python cache
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
+
+# Virtual environments
 .venv/
 venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+env/
 
-# IDE / OS
+# Local configuration
+config.cmd
+
+# Logs
+*.log
+logs/
+log/
+
+# Runtime temporary files
+*.tmp
+*.temp
+*.pid
+*.lock
+tmp/
+temp/
+
+# Android / ADB runtime output
+ui_dump.xml
+window_dump.xml
+dump.xml
+screenshots/
+captures/
+
+# Test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
 .vscode/
 .idea/
-.DS_Store
+*.swp
+*.swo
+
+# Windows
 Thumbs.db
 Desktop.ini
 
-# Build outputs (source and one checked-in prebuilt helper are retained)
-android/build/
-*.class
+# macOS
+.DS_Store
