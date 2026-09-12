@@ -10,7 +10,7 @@
 
 本项目已在 **Xiaomi Mi 9 SE** 真机环境完成实际运行验证。
 
-👉 **[进入 `mi9se` 实机验证分支](https://chatgpt.com/g/tree/mi9se)**
+👉 **[进入 `mi9se` 实机验证分支](https://github.com/jasperkoa/dianping-android-automation/tree/mi9se)**
 
 `mi9se` 分支保存的是基于 Xiaomi Mi 9 SE 实际设备调试并验证可运行的实例，可用于参考真实设备上的配置、运行方式及兼容性表现。
 
