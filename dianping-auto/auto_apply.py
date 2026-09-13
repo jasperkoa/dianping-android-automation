@@ -12,6 +12,7 @@ import sys
 import time
 import secrets
 import io
+import unicodedata
 import xml.etree.ElementTree as ET
 from screen_guard import inside, list_area, orange_button, footer_present, mine_selected
 
@@ -22,6 +23,53 @@ BUTTONS = {'免费抽', '免费抽奖'}
 
 class RecoverableUI(RuntimeError):
     pass
+
+
+class IneligibleActivity(RuntimeError):
+    pass
+
+
+def lv6_8_exclusive(value):
+    value = re.sub(r'\s+', '', unicodedata.normalize('NFKC', value)).lower()
+    return bool(re.search(r'lv6(?:-|~|—|–|至|到)(?:lv)?8(?:级)?专享', value))
+
+
+def ineligible_reason(root):
+    for text in texts(root):
+        compact = re.sub(r'\s+', '', unicodedata.normalize('NFKC', text)).lower()
+        if re.search(r'等级.{0,6}(?:不足|不符合|不满足)', text):
+            return text
+        if '仅限' in text and re.search(r'lv6(?:-|~|—|–|至|到)(?:lv)?8', compact):
+            return text
+        if any(word in text for word in ['报名资格不足', '不符合报名条件', '等级不足', '等级不满足',
+                                        '等级不符合', '暂不具备报名资格', '暂未满足报名要求',
+                                        '不满足报名要求', '活动已结束', '报名已截止']):
+            return text
+        if lv6_8_exclusive(text) and any(word in text for word in ['仅限', '不能报名', '无法报名', '不满足']):
+            return text
+    return None
+
+
+def notice_image_controls(root, width, height):
+    """Image-only acknowledgement and close controls relative to the observed notice."""
+    headings = [n for n in root.iter('node') if visible(n)
+                and any(t in label(n) for t in ['暂未满足报名要求', '不满足报名要求', '不符合报名条件', '报名资格不足'])]
+    if len(headings) != 1:
+        return None, None
+    _, heading_y, _, heading_bottom = bounds(headings[0])
+    images = [n for n in root.iter('node') if visible(n) and n.get('clickable') == 'true'
+              and n.get('class', '').endswith('ImageView')]
+    primary = []
+    close = []
+    for n in images:
+        x1, y1, x2, y2 = bounds(n)
+        if (x2-x1 > width*.45 and height*.02 < y2-y1 < height*.09
+                and heading_bottom < y1 < heading_bottom+height*.2):
+            primary.append(n)
+        if (x1 > width*.75 and heading_y-height*.12 < y1 < heading_y
+                and width*.025 < x2-x1 < width*.12 and .7 < (y2-y1)/(x2-x1) < 1.3):
+            close.append(n)
+    return (primary[0] if len(primary) == 1 else None, close[0] if len(close) == 1 else None)
 
 
 def label(n):
@@ -64,7 +112,7 @@ def activity_step(root, width, height):
 
 
 def candidates(root):
-    """按列表顺序选择有可见免费抽按钮的活动，不按会员徽标筛选。"""
+    """仅排除明确标注 Lv6–8 专享的行，其余免费抽均可参与。"""
     parents = {child: p for p in root.iter() for child in p}
     result = []
     for button in root.iter('node'):
@@ -80,6 +128,8 @@ def candidates(root):
                       ['中奖', '名额', '价值', '免费抽', '相似活动', '人报名', '已报名', 'km', '开奖'])
                       and t not in ['橙V专享', '橙V专属']]
             if titles:
+                if lv6_8_exclusive(' '.join(ts)):
+                    break
                 name = titles[0].replace('\ufffc', '').strip()
                 stores = [t for t in ts if t.endswith('店') and t != titles[0]]
                 title = ' | '.join([name] + stores[:1])
@@ -215,6 +265,9 @@ class Bot:
     def wait_for(self, names):
         for _ in range(4):
             root = self.snapshot()
+            reason = ineligible_reason(root)
+            if reason:
+                raise IneligibleActivity(reason)
             for name in names:
                 n = find(root, name)
                 if n is not None:
@@ -225,6 +278,10 @@ class Bot:
     def return_list(self):
         for _ in range(4):
             root = self.snapshot()
+            if ineligible_reason(root):
+                self.log('关闭资格不足弹窗后返回列表')
+                self.dismiss_submission_notice(root)
+                continue
             if self.menu_visible(root):
                 self.recover_navigation(root)
                 continue
@@ -259,6 +316,9 @@ class Bot:
         self.tap(button)
         try:
             name, n = self.wait_for(['我要报名', '已报名,看看其他活动', '已报名，看看其他活动'])
+        except IneligibleActivity as e:
+            self.skip_ineligible(title, str(e))
+            return
         except RuntimeError:
             if self.recover_navigation(self.snapshot()):
                 self.return_list()
@@ -268,25 +328,143 @@ class Bot:
             self.log('跳过已报名', title=title)
             self.return_list()
             return
-        self.tap(n)
-        _, confirm = self.wait_for(['确认报名'])
-        if find(self.root, '确认报名信息') is None:
-            raise RuntimeError('未识别确认报名信息弹窗。')
-        ts = texts(self.root)
-        if any(any(w in t for w in ['立即支付', '确认支付', '支付报名', '消耗PASS', '使用PASS卡', '兑换报名']) for t in ts):
-            raise RuntimeError('出现支付或兑换选项，停止，请手动检查。')
-        # 不猜测无标签勾选框；沿用页面现有协议/候补状态。
-        self.log('提交报名', title=title)
-        self.tap(confirm)
-        try:
-            self.wait_for(['报名成功'])
-        except RuntimeError as e:
-            raise RuntimeError('提交后未确认报名成功；不会自动重试提交，请手动检查。') from e
+        for attempt in range(1, 4):
+            self.tap(n)
+            try:
+                _, confirm = self.wait_for(['确认报名'])
+            except IneligibleActivity as e:
+                self.skip_ineligible(title, str(e))
+                return
+            except RuntimeError:
+                status, n = self.recover_submission(title)
+                if status == 'success':
+                    break
+                if status == 'skip' or attempt == 3:
+                    self.log('报名入口失败，跳过本轮活动', title=title, attempts=attempt)
+                    self.return_list()
+                    self.ensure_all_list()
+                    return
+                self.log('报名入口失败，返回重新报名', title=title, next_attempt=attempt+1)
+                time.sleep(self.args.delay)
+                continue
+            if find(self.root, '确认报名信息') is None:
+                raise RuntimeError('未识别确认报名信息弹窗。')
+            ts = texts(self.root)
+            if any(any(w in t for w in ['立即支付', '确认支付', '支付报名', '消耗PASS', '使用PASS卡', '兑换报名']) for t in ts):
+                raise RuntimeError('出现支付或兑换选项，停止，请手动检查。')
+            self.log('提交报名', title=title, attempt=attempt)
+            self.tap(confirm)
+            try:
+                result, _ = self.wait_for(['报名成功', '报名失败', '提交失败', '网络异常', '网络不给力'])
+                if result != '报名成功':
+                    raise RuntimeError(result)
+                break
+            except IneligibleActivity as e:
+                self.skip_ineligible(title, str(e))
+                return
+            except RuntimeError:
+                # Re-read before any resubmission: late success must not be submitted again.
+                self.log('报名结果未确认，返回页面核验', title=title, attempt=attempt)
+                status, n = self.recover_submission(title)
+                if status == 'success':
+                    break
+                if status == 'skip' or attempt == 3:
+                    self.log('跳过本次未成功活动', title=title, attempts=attempt)
+                    self.return_list()
+                    self.ensure_all_list()
+                    return
+                self.log('返回活动页面重新报名', title=title, next_attempt=attempt+1)
+                time.sleep(self.args.delay)
         self.success += 1
         self.log('报名成功', title=title, success=self.success)
         self.return_list()
         self.ensure_all_list()
         self.scroll_one_activity()
+
+    def skip_ineligible(self, title, reason):
+        self.seen.add(title)
+        self.log('资格不符，本轮不再尝试', title=title, reason=reason)
+        self.dismiss_submission_notice(self.snapshot())
+        self.return_list()
+        self.ensure_all_list()
+
+    def dismiss_submission_notice(self, root):
+        if ineligible_reason(root):
+            for attempt in range(2):
+                acknowledgement = next((find(root, text) for text in ['我知道了', '知道了', '确定']
+                                        if find(root, text) is not None), None)
+                primary, cross = notice_image_controls(root, self.width, self.height)
+                target = acknowledgement
+                if target is None and primary is not None and attempt == 0:
+                    if orange_button(self.screenshot(), bounds(primary)):
+                        target = primary
+                if target is None:
+                    target = cross
+                if target is None:
+                    raise RuntimeError('资格弹窗未识别到我知道了或关闭按钮，请手动关闭。')
+                self.log('点击资格弹窗关闭控件', control='我知道了' if target is not cross else '×')
+                self.tap(target)
+                root = self.snapshot()
+                if not ineligible_reason(root):
+                    return
+            raise RuntimeError('资格弹窗仍未关闭，未使用导航返回键。')
+        close = next((find(root, text) for text in ['完成', '我知道了', '知道了', '确定', '返回']
+                      if find(root, text) is not None), None)
+        if close is not None:
+            self.tap(close)
+        else:
+            self.back()
+
+    def recover_submission(self, title):
+        """Resolve late success, dismiss failed results, then reopen this activity."""
+        reopened = False
+        for _ in range(8):
+            root = self.snapshot()
+            ts = texts(root)
+            for success_text in ['报名成功', '已报名,看看其他活动', '已报名，看看其他活动']:
+                n = find(root, success_text)
+                if n is not None:
+                    self.log('恢复时确认已报名', title=title)
+                    return 'success', n
+            reason = ineligible_reason(root)
+            if reason:
+                self.seen.add(title)
+                self.log('资格不符，本轮不再尝试', title=title, reason=reason)
+                self.dismiss_submission_notice(root)
+                return 'skip', None
+            if '确认报名信息' in ts:
+                self.back()
+                continue
+            if any(any(w in t for w in ['报名失败', '提交失败', '网络异常', '网络不给力', '请稍后重试']) for t in ts):
+                close = next((find(root, text) for text in ['完成', '我知道了', '知道了', '返回']
+                              if find(root, text) is not None), None)
+                if close is not None:
+                    self.tap(close)
+                else:
+                    self.back()
+                continue
+            if '免费试活动详情' in ts:
+                retry = find(root, '我要报名')
+                if retry is not None and reopened:
+                    return 'retry', retry
+                # Refresh through the list: the old detail page may still display a stale button.
+                self.back()
+                continue
+            if '评友中心' in ts:
+                self.ensure_all_list()
+                continue
+            match = next((n for t, n in self.choices(root) if t == title), None)
+            if match is not None:
+                self.tap(match)
+                reopened = True
+                continue
+            if '免费试天天抽' in ts or '全部商区' in ts:
+                # An absent button alone is not proof of success.
+                self.log('未找到原活动报名入口，保留未确认状态', title=title)
+                return 'skip', None
+            if not self.recover_navigation(root):
+                self.back()
+        raise RuntimeError('无法恢复报名页面，请检查当前弹窗。')
 
     def scroll_one_activity(self):
         root = self.return_list()
